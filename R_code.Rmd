@@ -2,7 +2,8 @@
 title: "Data Analysis Task"
 date: "2026-02-01"
 output:
-  pdf_document: default
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -21,7 +22,7 @@ data_org <- read_excel("~/Desktop/Behavioral\ RP\ Recruiting\ Winter\ 26-selecte
 ```
 ## Links:
 
-All analysis code and datasets used in this project are available at: https://github.com/ey2166/Behavioral-RP-Recruiting-Winter
+All analysis code and datasets used in this project are available: \href{https://github.com/ey2166/Behavioral-RP-Recruiting-Winter}{click here}.
 
 ## Research question (hypothesis)
 
