@@ -19,6 +19,9 @@ library(sandwich)
 # Load the Excel file
 data_org <- read_excel("~/Desktop/Behavioral\ RP\ Recruiting\ Winter\ 26-selected/Data\ -\ 2026.xlsx", sheet = "Data")
 ```
+## Links:
+
+All analysis code and datasets used in this project are available at: https://github.com/ey2166/Behavioral-RP-Recruiting-Winter
 
 ## Research question (hypothesis)
 
