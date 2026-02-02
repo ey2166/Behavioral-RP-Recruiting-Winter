@@ -1,0 +1,184 @@
+---
+title: "Data Analysis Task"
+date: "2026-02-01"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(broom)
+library(knitr)
+library(lmtest)
+library(sandwich)
+
+# Load the Excel file
+data_org <- read_excel("~/Desktop/Behavioral\ RP\ Recruiting\ Winter\ 26-selected/Data\ -\ 2026.xlsx", sheet = "Data")
+```
+
+## Research question (hypothesis)
+
+Research question: How does the gender of the other party influence participants’ subjective ratings across different apologize situations?
+
+Hypothesis: Participant will report different subjective feeling to apology situations depending on the gender of the other person. Apology situation involving female counterparts will be perceived as less (or more) negative compare to those involving male counterparts. 
+
+## Data Cleaning
+
+(1) Attention-check question. Any response that does not pass the attention check will be excluded, as it indicates the respondent was not paying attention to the question.
+
+In this case, remove any response that does not contain “banana” in “Morocco” text box. A total of 15 responses were removed from the dataset: most due to incomplete surveys, and one because the participant did not follow the instructions in the attention-check question.
+
+(2) Checking age values to identify implausible values. 
+
+In our dataset, one response with an age of 149 was removed, as this value is extremely unlikely and the participant noted in the comments that the data should not be used, stating they were “just clicking through.”
+
+(3) Checking missing values. 
+
+Missing values occurred only in non-critical fields (e.g., IP addresses, participant names) and were not relevant to the analyses after the perious cleaning.
+```{r attention-check question, include=FALSE}
+# Remove any response that does not passed attention-check
+clean_data <- data_org %>%
+  filter(passedattn == "yes")
+
+# summary statistics for age
+summary(clean_data$age)
+# Remove response with age 149
+clean_data <- clean_data %>%
+  filter(age != 149)
+# Check distribution
+hist(clean_data$age)
+
+# Check Missing values
+colSums(is.na(clean_data))
+```
+
+## Test the hypothesis with the data
+
+Separate linear models ran for each apologize scenario (feelings_...) to examine the effect of the counterpart’s sex (target_sex) on reported feelings, controled with the participant's gender (sex), and their blameworthy score (blame_1). 
+
+```{r check hypothesis, include=FALSE}
+# Convert target_sex to factor
+clean_data$target_sex <- factor(clean_data$target_sex)
+
+# Reshape relevant variables to long format
+long_data <- clean_data %>%
+  pivot_longer(
+    cols = c(
+      feelings_youalone,
+      feelings_bothyoufirst,
+      feelings_themalone,
+      feelings_boththemfirst,
+      feelings_neither
+    ),
+    names_to = "scenario",
+    values_to = "feeling_score"
+  )
+
+# Separate linear models to test effect of target_sex on feelings
+results <- long_data %>%
+  group_by(scenario) %>%
+  group_modify(~ tidy(lm(feeling_score ~ target_sex, data = .x))) %>%
+  ungroup()
+```
+
+## Report effect sizes and interpret magnitude.
+```{r result visualization, echo=FALSE}
+# print result in table
+results %>%
+  select(scenario, term, estimate, std.error, statistic, p.value) %>%
+  arrange(scenario, term) %>%
+  kable(digits = 3, caption = "Linear model results by scenario")
+```
+
+All results showed very small gender differences. All male effect sizes ranged from approximately -5 to +2 points, depending on the apology style. In most apology situations, only the intercept (the difference between baseline and 0) was significant. The difference between men and women was not statistically significant, and the standard error was larger than the estimated value; therefore, the effect was negligible relative to variability.
+
+Therefore, we can conclude that male identity did not significantly alter feelings in all five situations.
+
+## Robustness checks
+To ensure the reliability of the regression results, heteroskedasticity-robust standard errors was computed. While ordinary least squares regression assumes that the variance of the error term is constant across observations (homoskedasticity),this assumption is often violated in real-world data, where some observations may be more variable than others. Robust standard errors adjusts is used for this potential heteroskedasticity to provide more reliable estimates of the uncertainty around the coefficients. 
+
+In this analysis, the coefficients remain insignificant under robust estimation, which further confirms that the observed zero effect is robust, rather than an artifact of heteroscedasticity.
+```{r echo=FALSE}
+# heteroskedasticity-robust standard errors
+results_robust <- long_data %>%
+  group_by(scenario) %>%
+  do({
+    model <- lm(feeling_score ~ target_sex, data = .)
+    tidy(coeftest(model, vcov = vcovHC(model, type = "HC1")))
+  })
+
+# print result in table
+results_robust %>%
+  select(scenario, term, estimate, std.error, statistic, p.value) %>%
+  arrange(scenario, term) %>%
+  kable(digits = 3, caption = "Robustness Check: OLS Estimates with Robust Standard Errors")
+```
+
+## Table and figures
+```{r result graphs, echo=FALSE}
+# maps the scenario variable names to descriptive titles
+scenario_labels <- c(
+  feelings_youalone = "You Apologize Alone",
+  feelings_bothyoufirst = "Both Apologize, You First",
+  feelings_themalone = "Other Apologizes Alone",
+  feelings_boththemfirst = "Both Apologize, Other First",
+  feelings_neither = "Neither Apologizes"
+)
+
+# print the distribution of feeling scores per gender in each scenario
+ggplot(long_data, aes(x = target_sex, y = feeling_score)) +
+  geom_boxplot() +
+  facet_wrap(~ scenario, labeller = labeller(scenario = scenario_labels)) +
+  labs(
+    title = "Feeling Scores by Gender of Other Person Across Apology Scenarios",
+    x = "Gender of Other Person",
+    y = "Feeling Score"
+  ) +
+  theme_minimal()
+```
+
+This figure shows the distribution of feeling scores across different apology scenarios, separated by the gender of the other person. Each boxplot represents the spread of participants’ feeling scores for one gender within a particular scenario. The box shows the interquartile range, the line inside the box shows the median, and the whiskers indicate the range of the data (excluding outliers). 
+
+Across all apology scenarios, there were no apparent differences in feeling scores between male and female targets, as shown by the overlapping distributions in the boxplots.
+
+## Weakness and Redesign
+
+### Weakness of the survey in testing the hypothesis
+One weakness of the survey is that it asks participants to imagine or recall a past conflict. This approach introduces variability that add noise and potential bias:
+
+(a) Participants differ in their imagery ability, where some can vividly recall or imagine the scenario, while others may not.
+
+(b) The closeness with the person they recall of may vary widely, affecting their feelings independently of the target’s sex or apology order.
+
+### Redesign
+
+To control for these issues, run a controlled, vignette-based experiment with:
+(1) Standardized Scenario
+Present all participants with the same written or video-based conflict scenario, to remove variability due to imagination ability or personal relationships.
+(2) Random Assignment
+Target’s sex and apology sequence are randomly assign to participants
+(3) Measurement
+Collect feelings ratings after exposure, include attention or comprehension checks to ensure participants engaged with the physiological measures (e.g., heart rate) to complement self-report.
+
+## Appendix
+### Sanity-check ranges
+
+A basic range checks was performed on all key variables to ensure their values ​​were within reasonable ranges. In R, I validated the minimum and maximum values ​​of each variable by viewing the data in a spreadsheet-like interface and sorting each column. Missing values are also checked. As mentioned earlier in data cleaning, after filtering with the attention check, all important variables had no missing values, ensuring that all analyses were based on complete data.
+
+### Within- and between-subject
+
+Each participant rated all apology situations, thus the this factor is considered a within-subjects factor. The key predictor variable (target gender) differs among participants, thus it is considered a between-subjects factor. Examining the dataset in R confirmed this mixed design where each participant rated multiple situations, but target gender had only one value.
+
+### Verifying Variable Levels
+
+The levels of the categorical variables have been validated. In R, the levels of `target_sex` and `sex` were checked using the `factor()` function to confirm that they are correctly encoded (e.g., "male" vs. "female"). 
+
+### Missing data.
+There was no missing data after filtering with the attention check.
+
+### AI/Tool Use Statement:
+I used Chatgpt only to assist in identifying the appropriate R libraries for my code. I asked the LLM which R packages were used for performing certain statistical analyses and data manipulations. All analysis decisions, coding, and interpretation were completed independently.
